@@ -92,16 +92,19 @@ module tt_um_tinyopt4 (
                                   acc_shifted[7:0];
 
     // --- 4.3. Error Saturation ---
-    wire signed [8:0] err_calc = d - y_hat;
+    wire signed [8:0] err_calc = d - y_hat_nxt;
     wire err_ovf = (err_calc > 9'sd127) || (err_calc < -9'sd128);
     wire signed [7:0] err_nxt = (err_calc > 9'sd127)  ?  8'sd127 :
                                 (err_calc < -9'sd128) ? -8'sd128 : 
                                 err_calc[7:0];
 
     // --- 4.4. Gradient and Weight Saturation ---
-    // Safe dynamic shift for gradient
-    wire [3:0] shift_amt = 4'd7 + mu_s; 
-    wire signed [15:0] grad_shifted = mult_out >>> shift_amt;
+    // Safe dynamic shift for gradient with round-to-nearest.
+    // Adding (1 << (shift_amt - 1)) before the arithmetic shift removes
+    // the systematic negative bias of ">>>" on signed operands.
+    wire [3:0] shift_amt = 4'd7 + mu_s;
+    wire signed [15:0] round_bias = 16'sd1 << (shift_amt - 1);
+    wire signed [15:0] grad_shifted = (mult_out + round_bias) >>> shift_amt;
 
     // Current weight selector for update accumulator
     wire signed [15:0] w_current = (state == S_UPD0) ? {{8{w0[7]}}, w0} :

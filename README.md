@@ -42,7 +42,7 @@ flowchart LR
     end
 
     subgraph Core ["tt_um_tinyopt4 Core (1x1 Tile)"]
-        FSM["10-Cycle Control FSM"]
+        FSM["11-State Control FSM (10-cycle processing path)"]
         REG["History Line x[n-i] & Weights w_i"]
         MULT["Time-Shared 8x8 Multiplier"]
         ACC["18-bit Accumulator & Saturation Unit"]
@@ -124,27 +124,25 @@ An iteration requires **10 clock cycles** from initial sample intake to coeffici
 ```mermaid
 stateDiagram-v2
     [*] --> S_IDLE
-    S_IDLE --> S_LOAD_X: start=1 & data_sel=0
-    S_IDLE --> S_CALC_Y0: start=1 & data_sel=1 (d loaded)
-
-    S_LOAD_X --> S_IDLE: Shift x[n] into buffer
+    S_IDLE --> S_IDLE: start=1 & data_sel=0 (shift x[n] into buffer)
+    S_IDLE --> S_MAC0: start=1 & data_sel=1 (latch d[n])
 
     state "Forward Filter Phase" as Fwd {
-        S_CALC_Y0 --> S_CALC_Y1: Acc = w0 * x0
-        S_CALC_Y1 --> S_CALC_Y2: Acc += w1 * x1
-        S_CALC_Y2 --> S_CALC_Y3: Acc += w2 * x2
-        S_CALC_Y3 --> S_EVAL_ERR: Acc += w3 * x3
+        S_MAC0 --> S_MAC1: acc = w0 * x0
+        S_MAC1 --> S_MAC2: acc += w1 * x1
+        S_MAC2 --> S_MAC3: acc += w2 * x2
+        S_MAC3 --> S_ERR:  acc += w3 * x3
     }
 
     state "Error Calculation" as Err {
-        S_EVAL_ERR --> S_UPD_W0: e = sat(d - y_hat)
+        S_ERR --> S_UPD0: y_hat = sat(acc >>> 7); e = sat(d - y_hat)
     }
 
     state "LMS Adaptation Phase" as Adapt {
-        S_UPD_W0 --> S_UPD_W1: w0 += (e * x0) >> (7+s)
-        S_UPD_W1 --> S_UPD_W2: w1 += (e * x1) >> (7+s)
-        S_UPD_W2 --> S_UPD_W3: w2 += (e * x2) >> (7+s)
-        S_UPD_W3 --> S_DONE: w3 += (e * x3) >> (7+s)
+        S_UPD0 --> S_UPD1: w0 += (e * x0) >>> (7+s)
+        S_UPD1 --> S_UPD2: w1 += (e * x1) >>> (7+s)
+        S_UPD2 --> S_UPD3: w2 += (e * x2) >>> (7+s)
+        S_UPD3 --> S_DONE: w3 += (e * x3) >>> (7+s)
     }
 
     S_DONE --> S_IDLE: Assert done, deassert busy
@@ -153,10 +151,10 @@ stateDiagram-v2
 
 ### Complete Execution Cycle Breakdown
 
-* **Cycle 0 (`S_IDLE`):** System waits for assertion of `start`. When loading $x[n]$, the shift register advances in 1 cycle. When loading $d[n]$, execution branches to `S_CALC_Y0`.
-* **Cycles 1–4 (`S_CALC_Y0` to `S_CALC_Y3`):** The shared multiplier processes $w_i[n] \cdot x[n-i]$ in consecutive cycles. The 18-bit accumulator accumulates the scaled products.
-* **Cycle 5 (`S_EVAL_ERR`):** Output $\hat{y}[n]$ is scaled from the accumulator and saturated to $Q1.7$. The scalar error $e[n] = d[n] - \hat{y}[n]$ is computed and latched.
-* **Cycles 6–9 (`S_UPD_W0` to `S_UPD_W3`):** The multiplier inputs switch to $e[n]$ and $x[n-i]$. The 16-bit signed product is shifted by $(7 + s)$, added to $w_i[n]$, checked for saturation, and written back to register $w_i$.
+* **Cycle 0 (`S_IDLE`):** System waits for assertion of `start`. When loading $x[n]$, the shift register advances in 1 cycle. When loading $d[n]$, execution branches to `S_MAC0`.
+* **Cycles 1–4 (`S_MAC0` to `S_MAC3`):** The shared multiplier processes $w_i[n] \cdot x[n-i]$ in consecutive cycles. The 18-bit accumulator accumulates the scaled products.
+* **Cycle 5 (`S_ERR`):** Output $\hat{y}[n]$ is scaled from the accumulator and saturated to $Q1.7$. The scalar error $e[n] = d[n] - \hat{y}[n]$ is computed and latched.
+* **Cycles 6–9 (`S_UPD0` to `S_UPD3`):** The multiplier inputs switch to $e[n]$ and $x[n-i]$. The 16-bit signed product is shifted by $(7 + s)$, added to $w_i[n]$, checked for saturation, and written back to register $w_i$.
 * **Cycle 10 (`S_DONE`):** `busy` is dropped, `done` pulses high for 1 clock cycle, and internal state returns to `S_IDLE`.
 
 ---
@@ -183,14 +181,14 @@ The readiness of `tt_um_tinyopt4` has been validated across four verification la
 
 ```
 [Algorithmic Model] ──> [RTL Simulation] ──> [Gate-Level Sim] ──> [Physical Hardening]
-    Python Q1.7            Cocotb / Icarus       GL Netlist + SDF      OpenLane / OpenROAD
+    Python Q1.7            Cocotb / Icarus       GL Netlist + SDF      LibreLane
 
 ```
 
-* **RTL Functional Verification:** Written with `cocotb` and simulated in `iverilog`. The testbench exercises individual FSM states, illegal input configurations, and pipeline latency.
-* **Closed-Loop Adaptive Convergence:** A 500-sample test bench simulates an unknown transversal plant ($W^* = [64, -32, 16, -8]$ in $Q1.7$). The hardware weights converge to the target vector within expected $Q1.7$ quantization noise limits ($\vert{}w_i - W^*_i\vert{} \le 6\text{ LSB}$).
+* **RTL Functional Verification:** Written with `cocotb` and simulated in `iverilog`. Two tests are executed: a single-iteration smoke test that verifies the FSM `busy`/`done` handshake and the `S_DONE` pulse timing, and a 500-sample closed-loop convergence test that drives the engine against a target plant $W^* = [64, -32, 16, -8]$ and checks that all four weight registers settle within $|w_i - W^*_i| \le 10$ LSB.
+* **Closed-Loop Adaptive Convergence:** A 500-sample test bench simulates an unknown transversal plant ($W^* = [64, -32, 16, -8]$ in $Q1.7$). The hardware weights converge to the target vector within expected $Q1.7$ quantization noise limits ($\vert{}w_i - W^*_i\vert{} \le 10\text{ LSB}$).
 * **Gate-Level Simulation (GLS):** The synthesized gate-level netlist was simulated under timing annotations using cell models from `ihp-sg13g2`, passing identical convergence test sets.
-* **Physical Implementation & Verification:** Executed via the OpenLane automated ASIC flow:
+* **Physical Implementation & Verification:** Executed via the LibreLane automated ASIC flow:
 * **Area:** Successfully packed and placed inside a **$1 \times 1$ tile** ($\approx 1,900$ cells).
 * **DRC / LVS:** Clean check with 0 design rule and layout-versus-schematic violations via KLayout and Magic.
 * **Timing (STA):** Setup and hold slack targets met at nominal 10 MHz clock constraints.
@@ -202,7 +200,7 @@ The readiness of `tt_um_tinyopt4` has been validated across four verification la
 ## 7. Limitations and Future Improvements
 
 * **Filter Order:** The transverse line is fixed at 4 taps. Expanding tap capacity would require moving from flip-flop storage to a dual-port SRAM block or an off-chip memory controller.
-* **Dynamic Range Floor:** The $Q1.7$ fixed-point format exhibits a steady-state residual error floor of approximately $\pm 4$ to $\pm 6$ LSB due to truncation.
+* **Dynamic Range Floor:** The $Q1.7$ fixed-point format exhibits a steady-state residual error floor of approximately $\pm 4$ to $\pm 8$ LSB due to truncation and the finite LMS step size.
 * **Throughput:** Processing each sample requires 10 clock cycles. Operating at 10 MHz yields a maximum continuous throughput of $1.0\text{ MSamples/s}$.
 
 ---
@@ -213,7 +211,7 @@ The readiness of `tt_um_tinyopt4` has been validated across four verification la
 ├── docs/
 │   └── info.md             # Project documentation for the Tiny Tapeout website
 ├── src/
-│   ├── config.json         # OpenLane hardening settings for IHP SG13G2
+│   ├── config.json         # LibreLane hardening settings for IHP SG13G2
 │   └── project.v           # Verilog-2001 RTL implementation of tt_um_tinyopt4
 ├── test/
 │   ├── Makefile            # Simulation build script for Cocotb
@@ -276,7 +274,7 @@ make
 | **Architectural Definition** | Complete | Fixed-point model and mathematical bounds finalized |
 | **RTL Implementation** | Complete | Verilog-2001 behavioral description (`src/project.v`) |
 | **Cocotb Verification** | Complete | 500-sample identification convergence test passing |
-| **Physical Hardening** | Complete | Hardened to **$1 \times 1$ tile** with OpenLane on IHP SG13G2 |
+| **Physical Hardening** | Complete | Hardened to **$1 \times 1$ tile** with LibreLane on IHP SG13G2 |
 | **DRC / LVS / Precheck** | Passing ($\checkmark$) | Zero violations detected by standard verification tools |
 | **Gate-Level Simulation** | Passing ($\checkmark$) | Zero timing or functional regression on gate netlist |
 | **CI / Automation** | Passing ($\checkmark$) | GitHub Actions `docs`, `test`, `gds`, and `viewer` workflows operational |
