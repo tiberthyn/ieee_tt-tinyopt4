@@ -1,23 +1,23 @@
 /*
- * Etapa 6: RTL - TinyOpt-4 (Verilog-2001)
- * Motor adaptativo LMS de 4 coeficientes en punto fijo (Q1.7).
+ * RTL - TinyOpt-4 (Verilog-2001)
+ * Adaptive LMS engine with 4 fixed-point coefficients (Q1.7).
  */
 
 `default_nettype none
 
 module tt_um_tinyopt4 (
-    input  wire [7:0] ui_in,    // Bus de datos principal (x, d, cfg)
-    output wire [7:0] uo_out,   // Bus de salida multiplexado (y_hat, e, w_i)
-    input  wire [7:0] uio_in,   // Pines bidireccionales (Entrada)
-    output wire [7:0] uio_out,  // Pines bidireccionales (Salida)
-    output wire [7:0] uio_oe,   // Direccionalidad de uio (1 = output, 0 = input)
-    input  wire       ena,      // Habilitador del diseño (Tiny Tapeout wrapper)
-    input  wire       clk,      // Reloj principal (Objetivo 10-20 MHz)
-    input  wire       rst_n     // Reset asíncrono, activo en bajo
+    input  wire [7:0] ui_in,    // Main data bus (x, d, cfg)
+    output wire [7:0] uo_out,   // Multiplexed output bus (y_hat, e, w_i)
+    input  wire [7:0] uio_in,   // Bidirectional pins (Input)
+    output wire [7:0] uio_out,  // Bidirectional pins (Output)
+    output wire [7:0] uio_oe,   // uio directionality (1 = output, 0 = input)
+    input  wire       ena,      // Design enable (Tiny Tapeout wrapper)
+    input  wire       clk,      // Main clock (Target 10-20 MHz)
+    input  wire       rst_n     // Asynchronous reset, active low
 );
 
     // ==========================================
-    // 1. DEFINICIÓN DE ESTADOS (FSM)
+    // 1. STATE DEFINITION (FSM)
     // ==========================================
     localparam [3:0] 
         S_IDLE = 4'd0,
@@ -35,42 +35,42 @@ module tt_um_tinyopt4 (
     reg [3:0] state;
 
     // ==========================================
-    // 2. REGISTROS INTERNOS Y DATAPATH
+    // 2. INTERNAL REGISTERS AND DATAPATH
     // ==========================================
-    reg signed [7:0]  x0, x1, x2, x3;   // Línea de retardo
-    reg signed [7:0]  w0, w1, w2, w3;   // Pesos (Q1.7)
-    reg signed [7:0]  d;                // Señal deseada
-    reg signed [17:0] acc;              // Acumulador MAC
-    reg signed [7:0]  y_hat;            // Predicción saturada
-    reg signed [7:0]  e;                // Error saturado
-    reg [2:0]         mu_s;             // Factor de desplazamiento (Tasa de aprendizaje)
+    reg signed [7:0]  x0, x1, x2, x3;   // Delay line
+    reg signed [7:0]  w0, w1, w2, w3;   // Weights (Q1.7)
+    reg signed [7:0]  d;                // Desired signal
+    reg signed [17:0] acc;              // MAC accumulator
+    reg signed [7:0]  y_hat;            // Saturated prediction
+    reg signed [7:0]  e;                // Saturated error
+    reg [2:0]         mu_s;             // Shift factor (learning rate)
     
-    // Banderas de estado
+    // Status flags
     reg flag_overflow;
     reg flag_weight_sat;
 
     // ==========================================
-    // 3. MAPEO DE PINES UIO
+    // 3. UIO PIN MAPPING
     // ==========================================
-    // Entradas [3:0]:
+    // Inputs [3:0]:
     wire start    = uio_in[0];
     wire data_sel = uio_in[1];
     wire cfg_sel  = uio_in[2];
     
-    // Configuración bidireccional (0: input, 1: output)
+    // Bidirectional configuration (0: input, 1: output)
     assign uio_oe = 8'b1111_0000; 
 
     // ==========================================
-    // 4. LÓGICA COMBINACIONAL (RECURSOS COMPARTIDOS)
+    // 4. COMBINATIONAL LOGIC (SHARED RESOURCES)
     // ==========================================
     
-    // --- 4.1. Multiplicador Compartido (8x8 -> 16 bit firmado) ---
+    // --- 4.1. Shared Multiplier (8x8 -> 16-bit signed) ---
     reg signed [7:0] mult_a;
     reg signed [7:0] mult_b;
     wire signed [15:0] mult_out = mult_a * mult_b;
 
     always @* begin
-        // Multiplexor de entradas al multiplicador según el estado
+        // Multiplier input multiplexer according to state
         case (state)
             S_MAC0: begin mult_a = w0; mult_b = x0; end
             S_MAC1: begin mult_a = w1; mult_b = x1; end
@@ -84,26 +84,26 @@ module tt_um_tinyopt4 (
         endcase
     end
 
-    // --- 4.2. Saturación y Truncamiento de y_hat ---
-    wire signed [17:0] acc_shifted = acc >>> 7; // Vuelta a Q1.7
+    // --- 4.2. Saturation and Truncation of y_hat ---
+    wire signed [17:0] acc_shifted = acc >>> 7; // Back to Q1.7
     wire acc_ovf = (acc_shifted > 18'sd127) || (acc_shifted < -18'sd128);
     wire signed [7:0] y_hat_nxt = (acc_shifted > 18'sd127)  ?  8'sd127 :
                                   (acc_shifted < -18'sd128) ? -8'sd128 : 
                                   acc_shifted[7:0];
 
-    // --- 4.3. Saturación de Error ---
+    // --- 4.3. Error Saturation ---
     wire signed [8:0] err_calc = d - y_hat;
     wire err_ovf = (err_calc > 9'sd127) || (err_calc < -9'sd128);
     wire signed [7:0] err_nxt = (err_calc > 9'sd127)  ?  8'sd127 :
                                 (err_calc < -9'sd128) ? -8'sd128 : 
                                 err_calc[7:0];
 
-    // --- 4.4. Gradiente y Saturación de Pesos ---
-    // Desplazamiento dinámico seguro para el gradiente
+    // --- 4.4. Gradient and Weight Saturation ---
+    // Safe dynamic shift for gradient
     wire [3:0] shift_amt = 4'd7 + mu_s; 
     wire signed [15:0] grad_shifted = mult_out >>> shift_amt;
 
-    // Selector del peso actual para el acumulador de actualización
+    // Current weight selector for update accumulator
     wire signed [15:0] w_current = (state == S_UPD0) ? {{8{w0[7]}}, w0} :
                                    (state == S_UPD1) ? {{8{w1[7]}}, w1} :
                                    (state == S_UPD2) ? {{8{w2[7]}}, w2} :
@@ -117,7 +117,7 @@ module tt_um_tinyopt4 (
                               w_target[7:0];
 
     // ==========================================
-    // 5. FSM SECUENCIAL Y ACTUALIZACIÓN DE REGISTROS
+    // 5. SEQUENTIAL FSM AND REGISTER UPDATE
     // ==========================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -125,7 +125,7 @@ module tt_um_tinyopt4 (
             x0 <= 8'sd0; x1 <= 8'sd0; x2 <= 8'sd0; x3 <= 8'sd0;
             w0 <= 8'sd0; w1 <= 8'sd0; w2 <= 8'sd0; w3 <= 8'sd0;
             d <= 8'sd0; acc <= 18'sd0; y_hat <= 8'sd0; e <= 8'sd0;
-            mu_s <= 3'd3; // Valor por defecto
+            mu_s <= 3'd3; // Default value
             flag_overflow <= 1'b0;
             flag_weight_sat <= 1'b0;
         end else begin
@@ -137,11 +137,11 @@ module tt_um_tinyopt4 (
                         if (cfg_sel) begin
                             mu_s <= ui_in[2:0];
                         end else if (data_sel == 1'b0) begin
-                            // Desplazar línea de retardo
+                            // Shift delay line
                             x3 <= x2; x2 <= x1; x1 <= x0;
                             x0 <= ui_in;
                         end else if (data_sel == 1'b1) begin
-                            // Iniciar iteración matemática
+                            // Start math iteration
                             d <= ui_in;
                             state <= S_MAC0;
                         end
@@ -188,11 +188,11 @@ module tt_um_tinyopt4 (
     end
 
     // ==========================================
-    // 6. ASIGNACIÓN DE SALIDAS (MULTIPLEXOR DE LECTURA)
+    // 6. OUTPUT ASSIGNMENT (READ MULTIPLEXER)
     // ==========================================
     reg [7:0] uo_out_reg;
     always @* begin
-        // Lectura combinacional asíncrona visible cuando IDLE
+        // Asynchronous combinational read visible when IDLE
         case (ui_in[2:0])
             3'b000: uo_out_reg = y_hat;
             3'b001: uo_out_reg = e;
@@ -206,11 +206,11 @@ module tt_um_tinyopt4 (
 
     assign uo_out = uo_out_reg;
 
-    // Salidas de bandera hacia el wrapper UIO
+    // Flag outputs to UIO wrapper
     wire busy = (state != S_IDLE && state != S_DONE);
     wire done = (state == S_DONE);
     
-    // Mapeo: [7]=WeightSat, [6]=Overflow, [5]=Done, [4]=Busy
+    // Mapping: [7]=WeightSat, [6]=Overflow, [5]=Done, [4]=Busy
     assign uio_out = {flag_weight_sat, flag_overflow, done, busy, 4'b0000};
 
 endmodule
