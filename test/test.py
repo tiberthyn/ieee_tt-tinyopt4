@@ -104,12 +104,12 @@ async def test_project(dut):
 
 
 # ============================================================
-#  Test 2 — 500-sample closed-loop convergence test
+#  Test 2 — 1500-sample closed-loop convergence test
 # ============================================================
 
 @cocotb.test()
 async def test_convergence(dut):
-    """500-sample system identification against W* = [64, -32, 16, -8]."""
+    """1500-sample system identification against W* = [64, -32, 16, -8]."""
     clock = Clock(dut.clk, 100, unit="ns")
     cocotb.start_soon(clock.start())
 
@@ -163,4 +163,4 @@ async def test_convergence(dut):
             f"w{i}: hardware={hw}, target={star}, |diff|={diff} > 10 LSB"
         )
 
-    dut._log.info("500-sample convergence test passed.")
+    dut._log.info("1500-sample convergence test passed.")

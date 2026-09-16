@@ -75,7 +75,7 @@ flowchart LR
 | `uio_in[0]` | `start` | Input | Operation trigger strobe |
 | `uio_in[1]` | `data_sel` | Input | Input routing selector: `0` = sample $x[n]$, `1` = reference $d[n]$ |
 | `uio_in[2]` | `cfg_sel` | Input | Configuration mode: writes $s$ to the learning rate shift register |
-| `uio_in[3]` | `unused` | Input | Reserved (tied low) |
+| `uio_in[3]` | `unused` | Input | Reserved (ignored internally) |
 | `uio_out[4]` | `busy` | Output | High while the FSM is processing an iteration |
 | `uio_out[5]` | `done` | Output | Single-cycle pulse marking the end of weight updates |
 | `uio_out[6]` | `overflow` | Output | Status flag: accumulator or error calculation overflow |
@@ -185,8 +185,8 @@ The readiness of `tt_um_tinyopt4` has been validated across four verification la
 
 ```
 
-* **RTL Functional Verification:** Written with `cocotb` and simulated in `iverilog`. Two tests are executed: a single-iteration smoke test that verifies the FSM `busy`/`done` handshake and the `S_DONE` pulse timing, and a 500-sample closed-loop convergence test that drives the engine against a target plant $W^* = [64, -32, 16, -8]$ and checks that all four weight registers settle within $|w_i - W^*_i| \le 10$ LSB.
-* **Closed-Loop Adaptive Convergence:** A 500-sample test bench simulates an unknown transversal plant ($W^* = [64, -32, 16, -8]$ in $Q1.7$). The hardware weights converge to the target vector within expected $Q1.7$ quantization noise limits ($\vert{}w_i - W^*_i\vert{} \le 10\text{ LSB}$).
+* **RTL Functional Verification:** Written with `cocotb` and simulated in `iverilog`. Two tests are executed: a single-iteration smoke test that verifies the FSM `busy`/`done` handshake and the `S_DONE` pulse timing, and a 1500-sample closed-loop convergence test that drives the engine against a target plant $W^* = [64, -32, 16, -8]$ and checks that all four weight registers settle within $|w_i - W^*_i| \le 10$ LSB.
+* **Closed-Loop Adaptive Convergence:** A 1500-sample test bench simulates an unknown transversal plant ($W^* = [64, -32, 16, -8]$ in $Q1.7$). The hardware weights converge to the target vector within expected $Q1.7$ quantization noise limits ($\vert{}w_i - W^*_i\vert{} \le 10\text{ LSB}$).
 * **Gate-Level Simulation (GLS):** The synthesized gate-level netlist was simulated under timing annotations using cell models from `ihp-sg13g2`, passing identical convergence test sets.
 * **Physical Implementation & Verification:** Executed via the LibreLane automated ASIC flow:
 * **Area:** Successfully packed and placed inside a **$1 \times 1$ tile** ($\approx 1,900$ cells).
@@ -259,7 +259,7 @@ make
 
 3. A successful verification output terminates with:
 ```text
-** TESTS=1 PASS=1 FAIL=0 SKIP=0 **
+** TESTS=2 PASS=2 FAIL=0 SKIP=0 **
 
 ```
 
@@ -273,7 +273,7 @@ make
 | --- | --- | --- |
 | **Architectural Definition** | Complete | Fixed-point model and mathematical bounds finalized |
 | **RTL Implementation** | Complete | Verilog-2001 behavioral description (`src/project.v`) |
-| **Cocotb Verification** | Complete | 500-sample identification convergence test passing |
+| **Cocotb Verification** | Complete | 1500-sample identification convergence test passing |
 | **Physical Hardening** | Complete | Hardened to **$1 \times 1$ tile** with LibreLane on IHP SG13G2 |
 | **DRC / LVS / Precheck** | Passing ($\checkmark$) | Zero violations detected by standard verification tools |
 | **Gate-Level Simulation** | Passing ($\checkmark$) | Zero timing or functional regression on gate netlist |
