@@ -126,25 +126,25 @@ stateDiagram-v2
     [*] --> S_IDLE
     S_IDLE --> S_IDLE: start=1 & data_sel=0 (shift x[n] into buffer)
     S_IDLE --> S_MAC0: start=1 & data_sel=1 (latch d[n])
-
+    
     state "Forward Filter Phase" as Fwd {
         S_MAC0 --> S_MAC1: acc = w0 * x0
         S_MAC1 --> S_MAC2: acc += w1 * x1
         S_MAC2 --> S_MAC3: acc += w2 * x2
-        S_MAC3 --> S_ERR:  acc += w3 * x3
+        S_MAC3 --> S_ERR: acc += w3 * x3
     }
-
+    
     state "Error Calculation" as Err {
-        S_ERR --> S_UPD0: "y_hat_nxt = sat(acc shifted right by 7); y_hat = y_hat_nxt; e = sat(d - y_hat_nxt)"
+        S_ERR --> S_UPD0: y_hat_nxt = sat(acc shifted right by 7), y_hat = y_hat_nxt, e = sat(d - y_hat_nxt)
     }
-
+    
     state "LMS Adaptation Phase" as Adapt {
-        S_UPD0 --> S_UPD1: "w0 = w0 + (e * x0) shifted right by (7+s)"
-        S_UPD1 --> S_UPD2: "w1 = w1 + (e * x1) shifted right by (7+s)"
-        S_UPD2 --> S_UPD3: "w2 = w2 + (e * x2) shifted right by (7+s)"
-        S_UPD3 --> S_DONE: "w3 = w3 + (e * x3) shifted right by (7+s)"
+        S_UPD0 --> S_UPD1: w0 = w0 + (e * x0) shifted right by (7+s)
+        S_UPD1 --> S_UPD2: w1 = w1 + (e * x1) shifted right by (7+s)
+        S_UPD2 --> S_UPD3: w2 = w2 + (e * x2) shifted right by (7+s)
+        S_UPD3 --> S_DONE: w3 = w3 + (e * x3) shifted right by (7+s)
     }
-
+    
     S_DONE --> S_IDLE: Assert done, deassert busy
 ```
 
