@@ -135,14 +135,14 @@ stateDiagram-v2
     }
 
     state "Error Calculation" as Err {
-        S_ERR --> S_UPD0: "y_hat_nxt = sat(acc >>> 7); y_hat <= y_hat_nxt; e <= sat(d - y_hat_nxt)"
+        S_ERR --> S_UPD0: "y_hat_nxt = sat(acc shifted right by 7); y_hat = y_hat_nxt; e = sat(d - y_hat_nxt)"
     }
 
     state "LMS Adaptation Phase" as Adapt {
-        S_UPD0 --> S_UPD1: "w0 += (e * x0) >>> (7+s)"
-        S_UPD1 --> S_UPD2: "w1 += (e * x1) >>> (7+s)"
-        S_UPD2 --> S_UPD3: "w2 += (e * x2) >>> (7+s)"
-        S_UPD3 --> S_DONE: "w3 += (e * x3) >>> (7+s)"
+        S_UPD0 --> S_UPD1: "w0 = w0 + (e * x0) shifted right by (7+s)"
+        S_UPD1 --> S_UPD2: "w1 = w1 + (e * x1) shifted right by (7+s)"
+        S_UPD2 --> S_UPD3: "w2 = w2 + (e * x2) shifted right by (7+s)"
+        S_UPD3 --> S_DONE: "w3 = w3 + (e * x3) shifted right by (7+s)"
     }
 
     S_DONE --> S_IDLE: Assert done, deassert busy
