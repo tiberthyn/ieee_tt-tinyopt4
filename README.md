@@ -1,6 +1,6 @@
 ![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
 
-# `iiie_ieee_tt_tinyopt4` — 4-Tap Adaptive LMS FIR Engine ASIC
+# `ieee_tt_tinyopt4` — 4-Tap Adaptive LMS FIR Engine ASIC
 
 `ieee_tt_tinyopt4` is a custom digital application-specific integrated circuit (ASIC) designed for real-time system identification and adaptive filtering. Fabricated using the open-source **IHP SG13G2** (130 nm BiCMOS) process technology on the **Tiny Tapeout (TTIHP26b)** shuttle, this core implements a sequential **Least Mean Squares (LMS)** parameter update engine for a 4-tap Finite Impulse Response (FIR) filter.
 
