@@ -1,8 +1,8 @@
 ![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
 
-# `tt_um_tinyopt4` — 4-Tap Adaptive LMS FIR Engine ASIC
+# `iiie_ieee_tt_tinyopt4` — 4-Tap Adaptive LMS FIR Engine ASIC
 
-`tt_um_tinyopt4` is a custom digital application-specific integrated circuit (ASIC) designed for real-time system identification and adaptive filtering. Fabricated using the open-source **IHP SG13G2** (130 nm BiCMOS) process technology on the **Tiny Tapeout (TTIHP26b)** shuttle, this core implements a sequential **Least Mean Squares (LMS)** parameter update engine for a 4-tap Finite Impulse Response (FIR) filter.
+`ieee_tt_tinyopt4` is a custom digital application-specific integrated circuit (ASIC) designed for real-time system identification and adaptive filtering. Fabricated using the open-source **IHP SG13G2** (130 nm BiCMOS) process technology on the **Tiny Tapeout (TTIHP26b)** shuttle, this core implements a sequential **Least Mean Squares (LMS)** parameter update engine for a 4-tap Finite Impulse Response (FIR) filter.
 
 The microarchitecture achieves a complete adaptive filter within a minimal silicon footprint of **$1 \times 1$ standard tile** ($\approx 167\,\mu\text{m} \times 108\,\mu\text{m}$) by combining time-multiplexed hardware sharing, power-of-two learning-rate scaling, and bounded fixed-point arithmetic.
 
@@ -17,7 +17,7 @@ Real-time adaptive system identification tasks—such as linear channel estimati
 
 ### Proposed Solution
 
-`tt_um_tinyopt4` addresses these constraints through structural resource sharing:
+`ieee_tt_tinyopt4` addresses these constraints through structural resource sharing:
 
 * **Single-Multiplier Datapath:** A single $8 \times 8$-bit signed multiplier handles both forward filtering and backward weight adaptation across consecutive clock cycles.
 * **Power-of-Two Scaling:** The LMS convergence rate ($\mu$) is constrained to negative powers of two ($\mu = 2^{-s}$), converting a multi-bit multiplier into a lightweight arithmetic right-shifter.
@@ -27,7 +27,7 @@ Real-time adaptive system identification tasks—such as linear channel estimati
 
 ## 2. Top-Level System Architecture and Pinout
 
-`tt_um_tinyopt4` interfaces directly with the standard Tiny Tapeout synchronous 8-bit bus architecture:
+`ieee_tt_tinyopt4` interfaces directly with the standard Tiny Tapeout synchronous 8-bit bus architecture:
 
 ```mermaid
 flowchart LR
@@ -41,7 +41,7 @@ flowchart LR
         CSEL["uio[2]: cfg_sel (1=config mu)"]
     end
 
-    subgraph Core ["tt_um_tinyopt4 Core (1x1 Tile)"]
+    subgraph Core ["ieee_tt_tinyopt4 Core (1x1 Tile)"]
         FSM["11-State Control FSM (10-cycle processing path)"]
         REG["History Line x[n-i] & Weights w_i"]
         MULT["Time-Shared 8x8 Multiplier"]
@@ -87,7 +87,7 @@ flowchart LR
 
 The internal core operates strictly in signed fixed-point **$Q1.7$** format (1 sign bit, 7 fractional bits). Numerical values map to the dynamic range $[-1.0, +0.9921875]$ via signed 8-bit two's complement integers $[-128, +127]$.
 
-`tt_um_tinyopt4` is dedicated specifically to the parameter identification/adaptation engine of an adaptive FIR filter; it is not a closed-loop plant controller.
+`ieee_tt_tinyopt4` is dedicated specifically to the parameter identification/adaptation engine of an adaptive FIR filter; it is not a closed-loop plant controller.
 
 ### 1. FIR Transversal Output
 
@@ -176,7 +176,7 @@ To fit the complete datapath inside a single **$1 \times 1$ tile** without place
 
 ## 6. Verification Methodology and Deployment Readiness
 
-The readiness of `tt_um_tinyopt4` has been validated across four verification layers:
+The readiness of `ieee_tt_tinyopt4` has been validated across four verification layers:
 
 ```
 [Algorithmic Model] ──> [RTL Simulation] ──> [Gate-Level Sim] ──> [Physical Hardening]
@@ -211,7 +211,7 @@ The readiness of `tt_um_tinyopt4` has been validated across four verification la
 │   └── info.md             # Project documentation for the Tiny Tapeout website
 ├── src/
 │   ├── config.json         # LibreLane hardening settings for IHP SG13G2
-│   └── project.v           # Verilog-2001 RTL implementation of tt_um_tinyopt4
+│   └── project.v           # Verilog-2001 RTL implementation of ieee_tt_tinyopt4
 ├── test/
 │   ├── Makefile            # Simulation build script for Cocotb
 │   ├── tb.v                # Verilog testbench wrapper connecting DUT
