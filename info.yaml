@@ -1,8 +1,8 @@
 # Tiny Tapeout project information
 project:
-  title:        "TinyOpt-4 LMS Engine"      # Project title
-  author:       "Berthyn"      # Your name
-  discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
+  title:        "ieee_tt_tinyopt4"      # Project title
+  author:       "Berthyn Rodrigo Tinini Chuquimia"      # Your name
+  discord:      "tiberthyn"      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
   description:  "4-tap LMS adaptive update engine for FIR system identification"      # One line description of what your project does
   language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
   clock_hz:     10000000       # Clock frequency in Hz (or 0 if not applicable)
